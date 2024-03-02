@@ -1,0 +1,145 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+
+public partial class Program
+{
+    private static readonly string connectionString = "Data Source=MyDatabase.sqlite;Version=3;";
+
+    public static void Main(string[] args)
+    {
+        // Створіть таблиці
+        CreateTables();
+
+        var equipmentList = new List<Equipment>
+  {
+   new Equipment { Name = "Перфоратор", Manufacturer = "Bosch", Price = 1500, Power = 800, OrdinalNumber = 1 },
+   new Equipment { Name = "Дриль", Manufacturer = "Makita", Price = 1000, Power = 600, OrdinalNumber = 2 },
+   new Equipment { Name = "Шуруповерт", Manufacturer = "DeWalt", Price = 1200, Power = 400, OrdinalNumber = 3 }
+  };
+
+        // Збережіть дані
+        SaveData(equipmentList);
+
+        // Отримайте дані
+        OutputData();
+    }
+
+    private static void CreateTables()
+    {
+        using (var connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+
+            // Додайте створення таблиці Equipment
+            using (var cmd = new SQLiteCommand("CREATE TABLE IF NOT EXISTS Equipment (Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT, Manufacturer TEXT, Price INTEGER, Power INTEGER, OrdinalNumber INTEGER)", connection))
+            {
+                cmd.ExecuteNonQuery();
+            }
+
+            // Створення таблиці AdditionalInfo (як і раніше)
+            using (var cmd = new SQLiteCommand("CREATE TABLE IF NOT EXISTS AdditionalInfo (Id INTEGER PRIMARY KEY AUTOINCREMENT, EquipmentId INTEGER, Model TEXT, Color TEXT, Warranty INTEGER, FOREIGN KEY (EquipmentId) REFERENCES Equipment (Id))", connection))
+            {
+                cmd.ExecuteNonQuery();
+            }
+        }
+    }
+
+    private static void SaveData(IEnumerable<Equipment> equipmentList)
+    {
+        using (var connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+
+            using (var cmd = new SQLiteCommand("INSERT INTO Equipment (Name, Manufacturer, Price, Power, OrdinalNumber) VALUES (@name, @manufacturer, @price, @power, @ordinalNumber)", connection))
+            {
+                foreach (var equipment in equipmentList)
+                {
+                    cmd.Parameters.AddWithValue("@name", equipment.Name);
+                    cmd.Parameters.AddWithValue("@manufacturer", equipment.Manufacturer);
+                    cmd.Parameters.AddWithValue("@price", equipment.Price);
+                    cmd.Parameters.AddWithValue("@power", equipment.Power);
+                    cmd.Parameters.AddWithValue("@ordinalNumber", equipment.OrdinalNumber);
+
+                    cmd.ExecuteNonQuery();
+
+                    // Отримайте щойно вставлений ідентифікатор обладнання
+                    object equipmentIdObject = cmd.ExecuteScalar();
+                    int equipmentId = Convert.ToInt32(equipmentIdObject);
+
+
+                    // Створіть екземпляр AdditionalInfo
+                    var additionalInfo = new AdditionalInfo("Модел 1", "Синій", 12);
+
+                    // Вставте додаткову інформацію, посилаючись на ідентифікатор обладнання
+                    using (var cmd2 = new SQLiteCommand("INSERT INTO AdditionalInfo (EquipmentId, Model, Color, Warranty) VALUES (@equipmentId, @model, @color, @warranty)", connection))
+                    {
+                        cmd2.Parameters.AddWithValue("@equipmentId", equipmentId);
+                        cmd2.Parameters.AddWithValue("@model", additionalInfo.Model);
+                        cmd2.Parameters.AddWithValue("@color", additionalInfo.Color);
+                        cmd2.Parameters.AddWithValue("@warranty", additionalInfo.Warranty);
+
+                        cmd2.ExecuteNonQuery();
+                    }
+                }
+            }
+        }
+    }
+    public static void OutputData()
+    {
+        using (var connection = new SQLiteConnection(connectionString))
+        {
+            connection.Open();
+            using (var cmd = new SQLiteCommand("SELECT e.Id, e.Name, e.Manufacturer, e.Price, e.Power, e.OrdinalNumber, ai.Model, ai.Color, ai.Warranty " +
+                            "FROM Equipment e INNER JOIN AdditionalInfo ai ON e.Id = ai.EquipmentId", connection))
+            {
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        // Отримайте значення з полів
+                        var equipmentId = reader.GetInt32(0);
+                        var name = reader.GetString(1);
+                        var manufacturer = reader.GetString(2);
+                        var price = reader.GetInt32(3);
+                        var power = reader.GetInt32(4);
+                        var ordinalNumber = reader.GetInt32(5);
+                        var model = reader.IsDBNull(6) ? null : reader.GetString(6); // Перевірка на null
+                        var color = reader.IsDBNull(7) ? null : reader.GetString(7); // Перевірка на null
+                        var warranty = reader.GetInt32(8);
+
+                        // Виведіть дані в структурованому форматі
+                        Console.WriteLine($"{equipmentId} {name} {manufacturer} {price} {power} {ordinalNumber} {model} {color} {warranty}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+public class Equipment
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public string Manufacturer { get; set; }
+    public int Price { get; set; }
+    public int Power { get; set; }
+    public int OrdinalNumber { get; set; }
+}
+
+public class AdditionalInfo
+{
+    public int Id { get; set; }
+    public int EquipmentId { get; set; }
+    public string Model { get; set; }
+    public string Color { get; set; }
+    public int Warranty { get; set; }
+
+    public AdditionalInfo(string model, string color, int warranty)
+    {
+        Model = model;
+        Color = color;
+        Warranty = warranty;
+    }
+}
